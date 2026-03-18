@@ -8,7 +8,6 @@ from vilar_model_architecture import DiffusionModel
 from noise_scheduler import NoiseScheduler
 from sampling import sample_posterior, save_posterior_samples
 
-# Set up argument parser
 parser = argparse.ArgumentParser(description='Sample from trained diffusion model for Vilar parameter inference')
 parser.add_argument('--budget', type=int, default=10000, help='Dataset budget (10000, 20000, or 30000)')
 parser.add_argument('--model_path', type=str, default=None, help='Path to trained model')
@@ -18,35 +17,28 @@ parser.add_argument('--save_dir', type=str, default='posterior_samples', help='D
 parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use')
 parser.add_argument('--seed', type=int, default=42, help='Random seed')
 
-# Parse arguments
 args = parser.parse_args()
 
-# Set random seed
 torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(args.seed)
 
-# Create save directory if it doesn't exist
 os.makedirs(args.save_dir, exist_ok=True)
 
-# Device
 device = torch.device(args.device)
 print(f"Using device: {device}")
 
-# Load dataset to get true observation and scalers
 def load_reference_data(budget):
-    dataset_path = f'/cephyr/users/nautiyal/Alvis/diffusion/vilar/datasets/vilar_dataset_{budget}.npz'
+    dataset_path = f'vilar_dataset_{budget}.npz'
     print(f"Loading reference data: {dataset_path}")
     
     data = np.load(dataset_path, allow_pickle=True)
     
-    # Extract reference data
     true_theta = data['true_theta']
     true_ts_scaled = data['true_ts_scaled']
     theta_scaler = data['theta_scaler']
     
-    # Convert to tensors
     true_theta = torch.tensor(true_theta, dtype=torch.float32)
     true_ts_scaled = torch.tensor(true_ts_scaled, dtype=torch.float32)
     
@@ -55,19 +47,15 @@ def load_reference_data(budget):
     
     return true_theta, true_ts_scaled, theta_scaler
 
-# Load reference data
 true_theta, true_ts_scaled, theta_scaler = load_reference_data(args.budget)
 
-# Determine model path if not provided
 if args.model_path is None:
     args.model_path = os.path.join('models', f"vilar_diffusion_budget{args.budget}_best.pt")
 
-# Load model
 print(f"Loading model from {args.model_path}")
 checkpoint = torch.load(args.model_path, map_location=device)
 model_args = checkpoint['args']
 
-# Create model with the same architecture as in training
 model = DiffusionModel(
     theta_dim=15,
     y_channels=3,
@@ -75,35 +63,27 @@ model = DiffusionModel(
     cfg_dropout_prob=0.2
 ).to(device)
 
-# Create noise scheduler using the core implementation
 noise_scheduler = NoiseScheduler(
     num_timesteps=model_args['num_timesteps'],
     beta_schedule=model_args['beta_schedule'],
     device=device
 )
 
-# Register noise schedule to model
 noise_scheduler.register_to_model(model)
 
-# Filter out noise schedule parameters from the state dict
 filtered_state_dict = {}
 for key, value in checkpoint['model_state_dict'].items():
-    # Skip noise schedule parameters that are now registered by the scheduler
     if key not in ['beta', 'alpha', 'alpha_hat', 'sqrt_alpha', 'sqrt_one_minus_alpha_bar', 'posterior_std']:
         filtered_state_dict[key] = value
 
-# Load model weights
 model.load_state_dict(filtered_state_dict, strict=False)
 model.eval()
 
-# Generate samples using the core implementation's sample_posterior function
 print(f"Generating {args.num_samples} posterior samples...")
-true_ts_scaled_device = true_ts_scaled.to(device).unsqueeze(0)  # Add batch dimension [1, 3, 200]
+true_ts_scaled_device = true_ts_scaled.to(device).unsqueeze(0)
 
-# Measure sampling time
 start_time = time.time()
 
-# Use the sample_posterior function from the core implementation
 posterior_samples = sample_posterior(
     model=model,
     y_observed=true_ts_scaled_device,
@@ -112,36 +92,30 @@ posterior_samples = sample_posterior(
     lambda_guidance=args.lambda_guidance
 )
 
-# Calculate sampling time
 end_time = time.time()
 sampling_time = end_time - start_time
 print(f"Sampling completed in {sampling_time:.2f} seconds")
 
-# Load the dataset to get the theta_scaler
-dataset_path = f'/cephyr/users/nautiyal/Alvis/diffusion/vilar/datasets/vilar_dataset_{args.budget}.npz'
+dataset_path = f'vilar_dataset_{args.budget}.npz'
 print(f"Loading dataset from {dataset_path} to get theta_scaler")
 data = np.load(dataset_path, allow_pickle=True)
 
-# Get the theta_scaler from the dataset
 if 'theta_scaler' in data:
     theta_scaler = data['theta_scaler'].item()
     print("Found theta_scaler in dataset, using it for denormalization")
     
-    # Properly denormalize the samples using the scaler
     posterior_samples = theta_scaler.inverse_transform(posterior_samples.cpu().numpy())
 else:
     print("ERROR: theta_scaler not found in dataset. Cannot properly denormalize samples.")
     print("Using raw samples without denormalization.")
     posterior_samples = posterior_samples.cpu().numpy()
 
-# Print simple statistics after processing
 print(f"Parameter ranges after processing:")
 print(f"  Min: {np.min(posterior_samples)}")
 print(f"  Max: {np.max(posterior_samples)}")
 print(f"  Mean: {np.mean(posterior_samples)}")
 
 
-# Prepare data for saving using the core implementation's save_posterior_samples function
 arrays_to_save = {
     "theta_samples": posterior_samples,
     "true_parameters": true_theta.cpu().numpy(),
@@ -150,7 +124,6 @@ arrays_to_save = {
     "budget": args.budget
 }
 
-# Save using the core implementation's function
 save_path = save_posterior_samples(
     samples=arrays_to_save,
     save_dir=args.save_dir,

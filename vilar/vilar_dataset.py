@@ -16,12 +16,9 @@ from gillespy2 import Model, Species, Reaction, Parameter, RateRule, AssignmentR
 from gillespy2 import EventAssignment, EventTrigger, Event
 from gillespy2.core.events import *
 from functools import partial
-from vilar_autoencoder import Conv1DAutoencoder, train_autoencoder, encode_dataset
 
-# Check device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Define parameter names
 parameter_names = ['alpha_a', 'alpha_a_prime', 'alpha_r', 'alpha_r_prime', 'beta_a', 
                   'beta_r', 'delta_ma', 'delta_mr', 'delta_a', 'delta_r', 'gamma_a', 
                   'gamma_r', 'gamma_c', 'theta_a', 'theta_r']
@@ -30,8 +27,6 @@ class Vilar_Oscillator(gillespy2.Model):
     def __init__(self, parameter_values=None):
         gillespy2.Model.__init__(self, name="Vilar_Oscillator")
         self.volume = 1
-
-        # Parameters
         self.add_parameter(gillespy2.Parameter(name="alpha_a", expression=50))
         self.add_parameter(gillespy2.Parameter(name="alpha_a_prime", expression=500))
         self.add_parameter(gillespy2.Parameter(name="alpha_r", expression=0.01))
@@ -48,7 +43,6 @@ class Vilar_Oscillator(gillespy2.Model):
         self.add_parameter(gillespy2.Parameter(name="theta_a", expression=50))
         self.add_parameter(gillespy2.Parameter(name="theta_r", expression=100))
 
-        # Species
         self.add_species(gillespy2.Species(name="Da", initial_value=1, mode="discrete"))
         self.add_species(gillespy2.Species(name="Da_prime", initial_value=0, mode="discrete"))
         self.add_species(gillespy2.Species(name="Ma", initial_value=0, mode="discrete"))
@@ -59,7 +53,6 @@ class Vilar_Oscillator(gillespy2.Model):
         self.add_species(gillespy2.Species(name="A", initial_value=10, mode="discrete"))
         self.add_species(gillespy2.Species(name="R", initial_value=10, mode="discrete"))
 
-        # Reactions
         self.add_reaction(gillespy2.Reaction(name="r1", reactants={'Da_prime': 1}, products={'Da': 1}, rate=self.listOfParameters["theta_a"]))
         self.add_reaction(gillespy2.Reaction(name="r2", reactants={'Da': 1, 'A': 1}, products={'Da_prime': 1}, rate=self.listOfParameters["gamma_a"]))
         self.add_reaction(gillespy2.Reaction(name="r3", reactants={'Dr_prime': 1}, products={'Dr': 1}, rate=self.listOfParameters["theta_r"]))
@@ -79,11 +72,9 @@ class Vilar_Oscillator(gillespy2.Model):
         self.add_reaction(gillespy2.Reaction(name="r17", reactants={'R': 1}, products={}, rate=self.listOfParameters["delta_r"]))
         self.add_reaction(gillespy2.Reaction(name="r18", reactants={'C': 1}, products={'R': 1}, rate=self.listOfParameters["delta_a"]))
 
-        # Timespan
         self.timespan(np.linspace(0, 200, 200))
 
 def simulator(params, model, solver, transform=True):
-    'Simulator takes parameter vector as input and return a time series data of shape 3x200'
     params = params.ravel()
     res = model.run(
         solver=solver,
@@ -95,7 +86,6 @@ def simulator(params, model, solver, transform=True):
         return np.ones((1, 3, 200))
 
     if transform:
-        # Extract only observed species
         sp_C = res['C']
         sp_A = res['A']
         sp_R = res['R']
@@ -104,36 +94,22 @@ def simulator(params, model, solver, transform=True):
         return res
 
 def generate_data_parallel(N, model, solver):
-    """ Returns the parameters and TS data using parallel processing"""
-    dmin = [0,    100,    0,   20,   10,   1,    1,   0,   0,   0, 0.5,    0,   0,    0,   0] #lower parameter boundary
-    dmax = [80,   600,    4,   60,   60,   7,   12,   2,   3, 0.7, 2.5,   4,   3,   70,   300] #upper parameter boundary
+    dmin = [0,    100,    0,   20,   10,   1,    1,   0,   0,   0, 0.5,    0,   0,    0,   0]
+    dmax = [80,   600,    4,   60,   60,   7,   12,   2,   3, 0.7, 2.5,   4,   3,   70,   300]
     params = np.random.uniform(low=dmin, high=dmax, size=(N,15))
-    num_cores = mp.cpu_count()  # Gets the number of available CPU cores
+    num_cores = mp.cpu_count()
     
-    # Create a partial function with both model and solver fixed
     simulator_with_model = partial(simulator, model=model, solver=solver)
     
     with mp.Pool(processes=num_cores) as pool:
         ts = pool.map(simulator_with_model, params)
-    ts = np.asarray(ts)  # Shape should be (N, 1, 3, 200)
-    return ts, params  # Return time series first, then parameters
+    ts = np.asarray(ts)
+    return ts, params
 
 def save_dataset():
-    """
-    Generate and save Vilar datasets with normalized data and embeddings.
-    Process:
-    1. Generate 30k simulations
-    2. Normalize time series and parameters
-    3. Train autoencoder and generate embeddings
-    4. Generate reference data with true parameters
-    5. Save all data including scalers
-    6. Create and save 10k and 20k subsets
-    """
-    # Create necessary directories
     os.makedirs('datasets', exist_ok=True)
     os.makedirs('vilar_plots', exist_ok=True)
 
-    # Initialize model and solver
     model = Vilar_Oscillator()
     solver = SSACSolver(model=model)
     
@@ -144,23 +120,18 @@ def save_dataset():
     print(f"Time series data: {ts_data.shape}")
     print(f"Parameters: {theta.shape}")
     
-    # Get dimensions
-    N, _, C, T = ts_data.shape  # Shape: (N, 1, 3, 200)
-    ts_data = ts_data.squeeze(1)  # Remove singleton dimension: (N, 3, 200)
+    N, _, C, T = ts_data.shape
+    ts_data = ts_data.squeeze(1)
     print(f"Squeezed time series data: {ts_data.shape}")
 
-    # Initialize scalers
     time_series_scalers = [MinMaxScaler(feature_range=(0, 1)) for _ in range(C)]
     theta_scaler = MinMaxScaler(feature_range=(0, 1))
 
-    # Normalize time series data channel-wise
     ts_data_norm = np.zeros_like(ts_data)
     for i in range(C):
-        # Reshape for scaler: (N, T) => "N samples, T features"
         ts_data_norm[:, i, :] = time_series_scalers[i].fit_transform(ts_data[:, i, :])
     print(f"Normalized time series data: {ts_data_norm.shape}")
 
-    # Normalize parameters
     theta_norm = theta_scaler.fit_transform(theta)
     print(f"Normalized parameters: {theta_norm.shape}")
 
@@ -179,11 +150,10 @@ def save_dataset():
     print("\nGenerating reference trajectory...")
     true_theta = np.array([50, 500, 0.01, 50, 50, 5, 10, 0.5, 1, 0.2, 1, 1, 2, 50, 100])
     true_ts = simulator(true_theta, model, solver)
-    true_ts = true_ts.squeeze(0)  # Remove batch dimension
+    true_ts = true_ts.squeeze(0)
     print(f"True parameters: {true_theta.shape}")
     print(f"True time series: {true_ts.shape}")
     
-    # Normalize reference trajectory
     true_ts_scaled = np.zeros_like(true_ts)
     for i in range(C):
         true_ts_scaled[i, :] = time_series_scalers[i].transform(true_ts[i, :].reshape(1, -1))
@@ -196,7 +166,6 @@ def save_dataset():
     # Save the full 30k dataset
     print("\nSaving datasets...")
     for size in [10000, 20000, 30000]:
-        # Take the first 'size' samples for each subset
         subset_idx = slice(0, size)
         
         save_dict = {

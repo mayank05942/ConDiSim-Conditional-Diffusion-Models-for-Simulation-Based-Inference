@@ -5,11 +5,6 @@ import matplotlib.pyplot as plt
 
 
 class NoiseScheduler:
-    """A class that encapsulates noise scheduling for diffusion models.
-    
-    This class handles different noise schedule types (linear, cosine, quadratic) and
-    computes all necessary diffusion constants (alpha, alpha_hat, etc.).
-    """
     
     def __init__(self, 
                  num_timesteps: int = 1000,
@@ -18,16 +13,6 @@ class NoiseScheduler:
                  eps: float = 1e-12,
                  device=None,
                  dtype=torch.float32):
-        """Initialize the noise scheduler.
-        
-        Args:
-            num_timesteps: Number of diffusion timesteps
-            beta_schedule: Type of schedule ('linear', 'quadratic', or 'cosine')
-            max_beta: Maximum beta value (for clamping)
-            eps: Small constant for numerical stability
-            device: Computation device
-            dtype: Data type for computations
-        """
         self.num_timesteps = num_timesteps
         self.beta_schedule = beta_schedule
         self.max_beta = max_beta
@@ -35,20 +20,10 @@ class NoiseScheduler:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = dtype
         
-        # Generate beta schedule and compute derived quantities
         self.beta = self._get_beta_schedule()
         self._compute_diffusion_constants()
     
     def _betas_for_alpha_bar(self, alpha_bar_fn):
-        """
-        Create a beta schedule that discretizes the given alpha_t_bar function,
-        which defines the cumulative product of (1-beta) over time from t = [0,1].
-        
-        Args:
-            alpha_bar_fn: a function that takes an argument t from 0 to 1 and
-                          produces the cumulative product of (1-beta) up to that
-                          part of the diffusion process.
-        """
         betas = []
         for i in range(self.num_timesteps):
             t1 = i / self.num_timesteps
@@ -57,37 +32,27 @@ class NoiseScheduler:
         return torch.tensor(betas, device=self.device, dtype=self.dtype)
     
     def _cosine_beta_schedule(self, s: float = 0.008):
-        """Compute betas for the cosine scheduler (Nichol & Dhariwal 2021, improved DDPM).
-        
-        This implementation has improved numerical stability and better scaling.
-        """
-        # Direct computation of betas for better numerical stability
         steps = self.num_timesteps
         t = torch.linspace(0, 1, steps + 1, device=self.device, dtype=self.dtype)
         alpha_bar = torch.cos(((t + s) / (1 + s)) * math.pi / 2) ** 2
         alpha_bar = torch.clamp(alpha_bar, min=self.eps)
         
-        # Compute betas directly from alpha_bar values
-        alpha_bar = alpha_bar / alpha_bar[0]  # Normalize to ensure alpha_bar[0] = 1
+        alpha_bar = alpha_bar / alpha_bar[0]
         betas = 1 - (alpha_bar[1:] / alpha_bar[:-1])
         
-        # Scale betas based on timesteps similar to linear/quadratic schedules
         scale_factor = 1000 / self.num_timesteps
-        betas = betas * scale_factor * 0.008  # Apply scaling similar to other schedules
+        betas = betas * scale_factor * 0.008
         
         return torch.clamp(betas, min=self.eps, max=self.max_beta)
     
     def _get_beta_schedule(self):
-        """Generate the beta schedule based on the specified type."""
         if self.beta_schedule == "linear":
-            # Linear schedule from Ho et al, extended to work for any number of diffusion steps
             scale = 1000 / self.num_timesteps
             beta_start = scale * 0.0001
             beta_end = scale * 0.02
             betas = torch.linspace(beta_start, beta_end, self.num_timesteps, device=self.device, dtype=self.dtype)
             
         elif self.beta_schedule == "quadratic":
-            # Quadratic schedule with scaled values based on the linear schedule
             scale = 1000 / self.num_timesteps
             beta_start = scale * 0.0001
             beta_end = scale * 0.02
@@ -95,7 +60,6 @@ class NoiseScheduler:
             betas = beta_start + (beta_end - beta_start) * (u ** 2)
             
         elif self.beta_schedule == "cosine":
-            # Cosine schedule doesn't use beta_start/beta_end - it generates its own values
             betas = self._cosine_beta_schedule()
             
         else:
@@ -104,17 +68,13 @@ class NoiseScheduler:
         return betas
     
     def _compute_diffusion_constants(self):
-        """Compute all diffusion constants from beta schedule."""
         with torch.no_grad():
-            # Compute alpha and alpha_hat
             self.alpha = 1.0 - self.beta
             self.alpha_hat = torch.cumprod(torch.clamp(self.alpha, min=self.eps), dim=0)
             
-            # Precompute sqrt terms for efficiency
             self.sqrt_alpha = torch.sqrt(torch.clamp(self.alpha, min=self.eps))
             self.sqrt_one_minus_alpha_bar = torch.sqrt(torch.clamp(1.0 - self.alpha_hat, min=self.eps))
             
-            # Compute posterior variance/std (for sampling)
             alpha_hat_tm1 = torch.cat([
                 torch.ones(1, device=self.device, dtype=self.dtype),
                 self.alpha_hat[:-1]
@@ -124,19 +84,9 @@ class NoiseScheduler:
             self.posterior_std = torch.sqrt(self.posterior_var)
 
     def register_to_model(self, model):
-        """Register noise schedule and precomputed constants to the model.
-        
-        Args:
-            model: The model to register the noise schedule to
-            
-        Returns:
-            The model with registered noise schedule
-        """
-        # Use the model's set_noise_schedule method if available
         if hasattr(model, 'set_noise_schedule'):
             model.set_noise_schedule(self.beta, eps=self.eps)
         else:
-            # Fallback to direct buffer registration
             model.register_buffer('beta', self.beta)
             model.register_buffer('alpha', self.alpha)
             model.register_buffer('alpha_hat', self.alpha_hat)
@@ -144,7 +94,6 @@ class NoiseScheduler:
             model.register_buffer('sqrt_one_minus_alpha_bar', self.sqrt_one_minus_alpha_bar)
             model.register_buffer('posterior_std', self.posterior_std)
             
-            # Set number of timesteps in the model
             model.num_timesteps = self.num_timesteps
         
         return model
