@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('Agg')   # keep this
+matplotlib.use('Agg')
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 
@@ -11,7 +11,6 @@ from scipy import stats
 from matplotlib.lines import Line2D
 import traceback
 
-# Optional imports for posterior predictive plots
 HHTask = None
 jax = None
 jnp = None
@@ -27,27 +26,20 @@ except ImportError as e:
     PREDICTIVE_AVAILABLE = False
 
 def load_results(results_dir, budget, run_num):
-    """Load saved results from the specified directory."""
-    # Use the consistent naming pattern
     samples_path = os.path.join(results_dir, f'hh_posterior_samples_budget_{budget}_run_{run_num}.npz')
     
-    # Check if the file exists
     if not os.path.exists(samples_path):
         raise ValueError(f"Results file not found: {samples_path}")
         
     print(f"Found results file: {samples_path}")
     
-    # Load data from the npz file
     data = np.load(samples_path, allow_pickle=True)
     
-    # Extract the posterior samples
     posterior_samples = data['theta_samples']
     
-    # Extract true parameters and observation data if available
     true_params = data.get('true_parameters', None)
     
-    # Create observation data dictionary with fallbacks for different key names
-    # Check for voltage trace with different possible key names
+    obs_data = {}
     voltage_trace = None
     for key in ['voltage_trace', 'true_V']:
         if key in data:
@@ -444,8 +436,8 @@ def plot_posterior_predictive(true_params, posterior_samples, obs_data, save_pat
 
 def main():
     # Base results directory
-    results_dir = "/cephyr/users/nautiyal/Alvis/diffusion/results/hh"
-    plots_dir = "/cephyr/users/nautiyal/Alvis/diffusion/plots/hh"
+    results_dir = "results/hh"
+    plots_dir = "plots/hh"
     
     # Create plots directory if it doesn't exist
     os.makedirs(plots_dir, exist_ok=True)

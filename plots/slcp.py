@@ -13,26 +13,21 @@ import re
 import seaborn as sns
 
 def plot_generated_vs_real_samples(real_samples, posterior_samples, legend_marker_size=15, save_path='comparison_plot.pdf'):
-    # Define column names for 5 variables
     columns = [r'$\theta_1$', r'$\theta_2$', r'$\theta_3$', r'$\theta_4$', r'$\theta_5$']
 
-    # Create DataFrames for the real and posterior samples
     df_real = pd.DataFrame(real_samples, columns=columns)
     df_real['Type'] = 'True Posterior'
 
     df_posterior = pd.DataFrame(posterior_samples, columns=columns)
     df_posterior['Type'] = 'Generated Posterior'
 
-    # Set font sizes - increased significantly
     label_fontsize = 60
     tick_fontsize = 35
     legend_fontsize = 50
 
-    # Create the figure and GridSpec layout
     fig, axes = plt.subplots(1, 5, figsize=(25, 5))
     plt.subplots_adjust(wspace=0.3)
 
-    # Define custom x-limits for specific features
     x_limits = {
         r'$\theta_1$': (-5, 5),
         r'$\theta_2$': (-2, 2),
@@ -41,25 +36,18 @@ def plot_generated_vs_real_samples(real_samples, posterior_samples, legend_marke
         r'$\theta_5$': (-1, 3.5),
     }
 
-    # Create KDE plots for each variable
     for i, col in enumerate(columns):
-        # Plot KDE for both distributions with fill
         sns.kdeplot(data=df_real[col], ax=axes[i], color='darkred', alpha=0.4, fill=True, label='True Posterior')
         sns.kdeplot(data=df_posterior[col], ax=axes[i], color='darkblue', alpha=0.4, fill=True, label='Generated Posterior')
 
-        # Set x-axis label and tick labels with font size
         axes[i].set_xlabel(col, fontsize=label_fontsize, labelpad=15)
         axes[i].tick_params(axis='both', which='major', labelsize=tick_fontsize)
 
-        # Remove y-axis labels except for the first plot
         if i != 0:
             axes[i].set_ylabel('')
-            axes[i].set_yticklabels([])
-        else:
-            # Format y-axis ticks to remove decimal from 0
-            axes[i].yaxis.set_major_formatter(FormatStrFormatter('%.g'))
-            # Adjust y-axis label positions up
-            axes[i].tick_params(axis='y', pad=15)  # Increased padding for y-axis labels
+
+        axes[i].yaxis.set_major_formatter(FormatStrFormatter('%.g'))
+        axes[i].tick_params(axis='y', pad=15)
 
         # Format x-axis ticks to remove decimal from 0
         axes[i].xaxis.set_major_formatter(FormatStrFormatter('%.g'))
@@ -93,7 +81,7 @@ def plot_generated_vs_real_samples(real_samples, posterior_samples, legend_marke
 
 def generate_plots(task_name):
     # Use absolute paths to ensure plots are saved in the correct location
-    base_dir = "/cephyr/users/nautiyal/Alvis/diffusion"
+    base_dir = "diffusion"
     results_dir = os.path.join(base_dir, "results", task_name)
     if not os.path.exists(results_dir):
         print(f"No results found for task {task_name}")

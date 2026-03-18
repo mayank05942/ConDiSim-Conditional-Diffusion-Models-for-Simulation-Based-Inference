@@ -16,36 +16,29 @@ import seaborn as sns
 
 def plot_hist(posterior_samples, real_samples=None, kde=True,
               save_path='sir_v1_post.pdf'):
-    # Convert torch tensors to numpy arrays if necessary
     posterior_samples = posterior_samples.numpy() if isinstance(posterior_samples, torch.Tensor) else posterior_samples
     real_samples = real_samples.numpy() if isinstance(real_samples, torch.Tensor) else real_samples
 
-    # Check if the input samples have 2 columns (for alpha and beta)
     if posterior_samples.shape[1] != 2 or real_samples.shape[1] != 2:
         raise ValueError("Both posterior_samples and real_samples must have exactly two columns (for alpha and beta).")
 
-    # Create DataFrames for the real and posterior samples with 2 columns
     df_real = pd.DataFrame(real_samples, columns=[r'$\alpha$', r'$\beta$'])
     df_real['Type'] = 'True Posterior'
 
     df_posterior = pd.DataFrame(posterior_samples, columns=[r'$\alpha$', r'$\beta$'])
     df_posterior['Type'] = 'Generated Posterior'
 
-    # Create the figure and GridSpec layout
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))  # Create a 1x2 subplot
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    # Define a list of colors for the plots
     colors = ['darkred', 'darkblue']
 
-    # Define x-axis limits based on the distribution ranges
     x_limits = {
         r'$\alpha$': (0.55, 0.70),
         r'$\beta$': (0.10, 0.25),
     }
 
-    # Adjust font sizes for clarity
-    label_fontsize = 35  # Increased
-    param_fontsize = 40  # For alpha and beta
+    label_fontsize = 35
+    param_fontsize = 40
     tick_fontsize = 14
     legend_fontsize = 30
 
@@ -54,59 +47,45 @@ def plot_hist(posterior_samples, real_samples=None, kde=True,
         ax_hist = axes[i]
 
         if kde:
-            # KDE plots with fill
             sns.kdeplot(data=df_real[param], ax=ax_hist, color=colors[0], 
                        label='True Posterior', linewidth=2.5, fill=True, alpha=0.4)
             sns.kdeplot(data=df_posterior[param], ax=ax_hist, color=colors[1], 
                        label='Generated Posterior', linewidth=2.5, fill=True, alpha=0.4)
         else:
-            # Regular histograms
             ax_hist.hist(df_real[param], bins=50, alpha=1, color=colors[0], 
                         linewidth=1, label='True Posterior', density=True)
             ax_hist.hist(df_posterior[param], bins=50, alpha=0.4, color=colors[1], 
                         linewidth=1, label='Generated Posterior', density=True)
 
-        # Set the x-axis limits
         ax_hist.set_xlim(x_limits[param])
 
-        # Set x-ticks
         if param == r'$\alpha$':
             ax_hist.set_xticks([0.55, 0.60, 0.65, 0.70])
         else:
             ax_hist.set_xticks([0.10, 0.15, 0.20, 0.25])
 
-        # Set the x-axis label with larger font size
         ax_hist.set_xlabel(param, fontsize=param_fontsize, labelpad=10)
 
-        # Increase tick label size
         ax_hist.tick_params(axis='both', which='major', labelsize=tick_fontsize)
 
-        # Make the border lines bolder
         for spine in ax_hist.spines.values():
             spine.set_linewidth(2)
 
-        # Make all spines visible and bold
         for spine in ax_hist.spines.values():
             spine.set_visible(True)
             spine.set_linewidth(2)
 
-    # Add a common Y-axis label (Density) only for the left subplot
-    # Add a common Y-axis label (Density) only for the left subplot with normal positioning
     axes[0].set_ylabel('Density', fontsize=label_fontsize, labelpad=30)
     
-    # Set exactly 3 ticks on y-axis
     for ax in axes:
         ymin, ymax = ax.get_ylim()
-        # Create 3 evenly spaced ticks, excluding 0
-        yticks = np.linspace(ymin, ymax, 4)[1:]  # Get 4 points and exclude 0
+        yticks = np.linspace(ymin, ymax, 4)[1:]
         ax.set_yticks(yticks)
-        # Format tick labels to remove decimals
         ax.set_yticklabels([f"{int(y)}" for y in yticks])
     axes[1].set_ylabel('')
 
     plt.tight_layout(pad=1.0)
 
-    # Create custom legend with filled patches for KDE
     if kde:
         handles = [
             plt.Rectangle((0,0), 1, 1, fc=colors[0], alpha=0.3, label='True Posterior'),
@@ -319,7 +298,7 @@ def plot_hist(posterior_samples, real_samples=None, kde=True,
 
 def generate_plots(task_name):
     # Use absolute paths to ensure plots are saved in the correct location
-    base_dir = "/cephyr/users/nautiyal/Alvis/diffusion"
+    base_dir = "diffusion"
     results_dir = os.path.join(base_dir, "results", task_name)
     
     # Check if the results directory exists
