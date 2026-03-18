@@ -10,10 +10,9 @@ from scoresbibm.tasks.hhtask import HHTask
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 import copy
-sys.path.append('/cephyr/users/nautiyal/Alvis/diffusion')
+sys.path.append('diffusion')
 from utils import load_data, create_dataloaders, noise_schedule, betas_for_alpha_bar
 
-# Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class LinearConditionalDiffusionModel(nn.Module):
@@ -24,7 +23,7 @@ class LinearConditionalDiffusionModel(nn.Module):
         self.num_timesteps = num_timesteps
 
         layers = []
-        input_dim = theta_dim + y_dim + 1  # +1 for the time step t
+        input_dim = theta_dim + y_dim + 1
         for size in layer_sizes:
             layers.append(nn.Linear(input_dim, size))
             layers.append(nn.LeakyReLU(0.1))
@@ -74,7 +73,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, num_epoch
     best_val_loss = float('inf')
     best_model = None
     counter = 0
-    patience = 20  # Early stopping patience
+    patience = 20
 
     train_losses = []
     val_losses = []
@@ -139,10 +138,8 @@ def create_hh_dataset(simulation_budget, seed=42):
     hh_task = HHTask(backend="jax")
     rng = jax.random.PRNGKey(seed)
     
-    # Generate data
     data = hh_task.get_data(num_samples=simulation_budget, rng=rng)
     
-    # Extract parameters (theta) and corresponding simulated data (x)
     theta = data["theta"]
     x = data["x"]
     
@@ -173,7 +170,6 @@ def generate_observed_data(hh_task, seed=18):
     observation_stream = observation_generator(key)
     condition_mask, x_o, theta_o = next(observation_stream)
     
-    # Generate traces and stats
     V, H, _ = simulator(key, theta_o)
     
     print(f"Generated observed data:")
@@ -186,7 +182,6 @@ def generate_observed_data(hh_task, seed=18):
 
 if __name__ == "__main__":
     device = torch.device("cpu")
-    # Define hyperparameters
     hyperparams = {
         'theta_dim': 7,
         'y_dim': 8,
@@ -204,37 +199,30 @@ if __name__ == "__main__":
         'num_samples': 10000  
     }
 
-    # Create results directory if it doesn't exist
-    results_dir = "results"  # We're already in the hh directory
+    results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
 
-    # Iterate over simulation budgets and runs
     for budget in hyperparams['simulation_budgets']:
         for run in range(1, hyperparams['num_runs'] + 1):
             print(f"\nStarting simulation budget {budget}, run {run}")
             
-            # Generate dataset
             hh_task = HHTask(backend="jax")
             theta, x = create_hh_dataset(simulation_budget=budget)
 
             theta = np.array(theta)
             x = np.array(x)
 
-            # Apply standard scaling
             scaler_theta = StandardScaler()
             scaler_x = StandardScaler()
 
             theta = scaler_theta.fit_transform(theta)
             x = scaler_x.fit_transform(x)
 
-            # Convert to torch tensors
             theta = torch.tensor(theta, dtype=torch.float32)
             x = torch.tensor(x, dtype=torch.float32)
 
-            # Generate observed data (same for all runs of same budget)
             theta_o, x_o, V, H = generate_observed_data(hh_task)
 
-            # Instantiate the LinearConditionalDiffusionModel
             theta_dim = hyperparams['theta_dim']
             y_dim = hyperparams['y_dim']
             layer_sizes = hyperparams['layer_sizes']
@@ -242,7 +230,6 @@ if __name__ == "__main__":
 
             diffusion_model = LinearConditionalDiffusionModel(theta_dim, y_dim, layer_sizes, num_timesteps).to(device)
 
-            # Initialize beta schedule and compute alpha, alpha_hat
             beta = noise_schedule(
                 num_timesteps=num_timesteps,
                 beta_start=hyperparams['beta_start'],
@@ -252,42 +239,33 @@ if __name__ == "__main__":
             alpha = 1 - beta
             alpha_hat = torch.cumprod(alpha, dim=0)
             
-            # Set the parameters in the model
             diffusion_model.beta = beta
             diffusion_model.alpha = alpha
             diffusion_model.alpha_hat = alpha_hat
 
-            # Define optimizer and scheduler
             optimizer = optim.AdamW(diffusion_model.parameters(), lr=hyperparams['learning_rate'], weight_decay=1e-4)
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
 
-            # Prepare data loaders
             train_loader, val_loader = create_dataloaders(theta, x, batch_size=hyperparams['batch_size'])
 
-            # Train the model
             best_model, train_losses, val_losses = train_model(diffusion_model, train_loader, val_loader, optimizer, scheduler, 
                                                              num_epochs=hyperparams['num_epochs'], 
                                                              num_timesteps=num_timesteps)
 
-            # Save the trained model
             model_filename = f"hh_diffusion_model_budget_{budget}_run_{run}.pth"
             model_path = os.path.join(results_dir, model_filename)
             torch.save(best_model.state_dict(), model_path)
             print(f"Model saved to {model_path}")
 
-            # Prepare observed data for sampling
             x_o_scaled = scaler_x.transform(x_o.reshape(1, -1))
             x_o_tensor = torch.tensor(x_o_scaled, dtype=torch.float32)
             
-            # Sample from the model
             num_samples = hyperparams['num_samples']
             y_observed = x_o_tensor.repeat(num_samples, 1).to(device)
             theta_samples, intermediate_samples = best_model.sample(num_samples, y_observed)
             
-            # Transform samples back to original scale
             theta_samples_descaled = scaler_theta.inverse_transform(theta_samples.cpu().numpy())
 
-            # Save posterior samples with budget and run information
             posterior_filename = f"hh_posterior_samples_budget_{budget}_run_{run}.npz"
             posterior_path = os.path.join(results_dir, posterior_filename)
             np.savez(posterior_path, 
