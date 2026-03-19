@@ -2,10 +2,18 @@
 
 This repository contains the implementation of conditional diffusion models for simulation-based inference tasks.
 
+**Paper**: [ConDiSim: Conditional Diffusion Models for Simulation Based Inference](https://arxiv.org/abs/2505.08403) - **Accepted at AISTATS 2026**
+
 ## Overview
 
 The code implements a diffusion-based approach for posterior inference across multiple benchmark tasks including:
-- SBIBM Benchmark Tasks
+- Two Moons
+- Gaussian Linear
+- Gaussian Mixture Model
+- Bernoulli GLM
+- SIR (Susceptible-Infected-Recovered)
+- Lotka-Volterra
+- SLCP
 - Hodgkin-Huxley
 - Vilar Oscillator
 
