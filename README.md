@@ -5,15 +5,13 @@ This repository contains the implementation of conditional diffusion models for 
 ## Overview
 
 The code implements a diffusion-based approach for posterior inference across multiple benchmark tasks including:
-- Two Moons
-- Gaussian Linear, Gaussian Linear Uniform
-- Gaussian Mixture Model
-- Bernoulli GLM, Bernoulli GLM Raw
-- SIR (Susceptible-Infected-Recovered)
-- Lotka-Volterra
-- SLCP and SLCP Distractors
+- SBIBM Benchmark Tasks
 - Hodgkin-Huxley
-- Vilar (Genetic) Oscillator
+- Vilar Oscillator
+
+## Architecture
+
+![ConDiSim Architecture](figs/condisim_model.png)
 
 ## Repository Structure
 
@@ -53,9 +51,10 @@ The code implements a diffusion-based approach for posterior inference across mu
 - NumPy
 - Matplotlib
 - SciPy
-- sbibm (for benchmark tasks)
+- sbibm (for benchmark tasks) - https://github.com/sbi-benchmark/sbibm
 - JAX (for Hodgkin-Huxley tasks)
 - scoresbibm (for Hodgkin-Huxley tasks)
+- bayesflow (for SBC diagnostics) - https://github.com/bayesflow-org/bayesflow
 
 ## Usage
 
@@ -95,4 +94,16 @@ python ECDF/sbc_plots.py
 
 ## Citation
 
-If you use this code, please cite our paper.
+If you use this code, please cite our paper:
+
+```bibtex
+@misc{nautiyal2025condisimconditionaldiffusionmodels,
+      title={ConDiSim: Conditional Diffusion Models for Simulation Based Inference}, 
+      author={Mayank Nautiyal and Andreas Hellander and Prashant Singh},
+      year={2025},
+      eprint={2505.08403},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2505.08403}, 
+}
+```
